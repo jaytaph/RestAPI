@@ -30,6 +30,9 @@ abstract class ji_restController {
             $this->setResponse(new ji_response());
         }
 
+        // Check if we need to call resource or collection
+        $entity = $request->isResource() ? "Resource" : "Collection";
+
         /**
          * HTTP PUT and POST are pretty much interchangeable. Can be configured here 
          */
@@ -40,11 +43,11 @@ abstract class ji_restController {
                 break;
             case "put" :
                 // PUT is create or update, depending on resource or collection
-                $crudMethod = ($entity == "Resource") ? "Update" : "Create";
+                $crudMethod = ($request->isResource()) ? "Update" : "Create";
                 break;
             case "post" :
                 // POST is create or update, depending on resource or collection
-                $crudMethod = ($entity == "Resource") ? "Update" : "Create";
+                $crudMethod = ($request->isResource()) ? "Update" : "Create";
                 break;
             case "get" :
             default :
@@ -52,9 +55,6 @@ abstract class ji_restController {
                 $crudMethod = "Retrieve";
                 break;
         }
-
-        // Check if we need to call resource or collection
-        $entity = $request->isResource() ? "Resource" : "Collection";
 
         // Call function
         $handleFunc = "handle".$crudMethod.$entity;

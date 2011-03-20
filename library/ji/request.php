@@ -30,31 +30,39 @@ class ji_request {
         $this->setAccept($server_vars['HTTP_ACCEPT']);
         $this->setHost($server_vars['HTTP_HOST']);
 
+        $items = array();
+
         // collect URL info and sets the url elements.
         if(isset($server_vars['PATH_INFO'])) {
             $items = explode('/',$server_vars['PATH_INFO']);
+
+            // Remove first (empty) item
             array_shift($items);
+        }
 
-            // Default default to default..
+            // Default defaults to default..
             if (count($items) == 0) $items[] = "default";
-
-            /* Resources have an even number of items on the path. Collections don't:
-             * Resource: /event/3/talk/5
-             * Collection: /event/4/talks
-             */
-            $this->setResource((count($items) & 1) != 1);
 
             // Map serialized url data into key value pairs
             $path = "";
             while (count($items)) {
                 $k = array_shift($items);
                 if (strlen($k) == 0) continue;
-                $this->addUrlElement($k, array_shift($items), $path);
 
-                // Holds the "hiearchy" for finding deeper controllers
+                $tmp = $this->_findMapping($k);
+                if ($tmp === false) {
+                    throw new Exception("Mapping not found");
+                }
+
+                if ($tmp[1] == MAP_RESOURCE) {
+                    $this->addUrlElement($k, array_shift($items), $path);
+                } else {
+                    $this->addUrlElement($k, null, $path);
+                }
+
+                // Holds the "hierarchy" for finding deeper controllers
                 $path .= $k."_";
             }
-        }
 
         // Parse query string and set (default) values
         parse_str($server_vars['QUERY_STRING'], $parameters);
@@ -64,6 +72,20 @@ class ji_request {
     }
 
 
+    /**
+     * @param  $name
+     * @return bool
+     */
+    protected function _findMapping($name) {
+        global $config;
+        return isset ($config['mapping'][$name]) ? $config['mapping'][$name] : false;
+    }
+
+
+    /**
+     * @param  $name
+     * @return bool
+     */
     public function addUrlElement($element, $resource, $path) {
         $this->_url_elements[] = array(
             'element' => $element,
@@ -72,6 +94,11 @@ class ji_request {
         );
     }
 
+
+    /**
+     * @param  $name
+     * @return bool
+     */
     public function getUrlElements() {
         return $this->_url_elements;
     }
@@ -137,7 +164,12 @@ class ji_request {
 
     public function isResource()
     {
-        return $this->_resource;
+        return ($this->getResource() !== null);
+    }
+
+    public function getResource() {
+        $element = $this->getMainElement();
+        return $element['resource'];
     }
 
     public function setVerb($verb)

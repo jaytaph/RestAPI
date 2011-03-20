@@ -1,23 +1,19 @@
 <?php
 
-print "<pre>";
-
 // Full error reporting
 error_reporting(-1);
 ini_set('display_errors', true);
 
+// Include rest mapping
+include_once("../config/restmap.php");
+
 // Setup
 set_exception_handler('handle_exception');
-setupDb();
 $request = new ji_request($_SERVER);
 
 // Pass through parent controllers if needed (in case of /event/%d/talk/%d/comment/%d)
 foreach ($request->getParentElements() as $element) {
-    print "PARENT ELEMENTS! ".print_r($element,true);
-    $tmp = findController($element['element']);
-    if (! $tmp) die ("Cannot find controller: ".$element['element']);
-
-    $controllerClass = $element['path'].$tmp."Controller";
+    $controllerClass = $element['path'].$tmp[0]."Controller";
     print "Controller: ".$controllerClass." : ";
 
     // Check if we are allowed to continue
@@ -33,9 +29,7 @@ foreach ($request->getParentElements() as $element) {
 
 // Call the actual endpoint controller (we call handle(), not passthrough() and we call without resource) 
 $element = $request->getMainElement();
-$tmp = findController($element['element']);
-if (! $tmp) die ("Cannot find controller ".$element['element']);
-$controllerClass = $element['path'].$tmp."Controller";
+$controllerClass = $element['path'].$element['element']."Controller";
 $controller = new $controllerClass();
 $response = $controller->handle($request);
 
@@ -60,24 +54,7 @@ function output(ji_response $response) {
 }
 
 
-/**
- * Controller mapper. This makes it possible to map certain uri-elements to controllers.
- * For instance:  "/events/%d" to the event-controller, but also "/children" to the
- * child-controller if needed.
- *
- * It means we have to map each URL element for now, but I prefer this over auto-detection
- * for the time being.
- */
-function findController($name) {
-    $mappers = array(
-        'event' => 'event', 'events' => 'event',
-        'talk' => 'talk', 'talks' => 'talk',
-        'user' => 'user', 'users' => 'user',
-        'comment' => 'comment', 'comments' => 'comment',
-        'default' => 'default'
-    );
-    return isset ($mappers[$name]) ? $mappers[$name] : false;
-}
+
 
 
 /**
@@ -116,20 +93,4 @@ function __autoload($classname) {
 		include('../views/' . $classname . '.php');
 		return true;
 	}
-}
-
-
-/**
- * @return void
- */
-function setupDb() {
-    // config setup
-    define('BASEPATH', '.');
-
-    // Assumes that here we find CodeIgnited database config...
-    require_once('../../system/application/config/database.php');
-    $ji_db = new PDO('mysql:host=' . $db['default']['hostname'] .
-        ';dbname=' . $db['default']['database'],
-        $db['default']['username'],
-        $db['default']['password']);
 }
