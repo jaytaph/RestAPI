@@ -5,18 +5,31 @@ class ji_request {
     protected $_accept;
     protected $_host;
     protected $_parameters;
-    protected $_verb;
+    protected $_method;
     protected $_url_elements;
+    protected $_url;
+    protected $_version;
+    protected $_format;
+    protected $_header;
 
     /**
      * Constructs a request. Can be populate form server variables if needed
      *
      * @param array|null $server_vars
      */
-    function __construct(array $server_vars = null) {
+    function __construct($db, array $server_vars = null) {
+        $this->db = $db;
         if (is_array($server_vars)) {
             $this->_populate($server_vars);
         }
+    }
+
+    function addHeader($k, $v) {
+        $this->_headers[$k] = $v;
+    }
+
+    function getHeader($k, $default = null) {
+        return isset($this->_headers[$k]) ? $this->_headers[$k] : $default;
     }
 
     /**
@@ -26,9 +39,12 @@ class ji_request {
      */
     protected function _populate($server_vars) {
         // Collect headers
-        $this->setVerb($server_vars['REQUEST_METHOD']);
+        $this->setMethod($server_vars['REQUEST_METHOD']);
         $this->setAccept($server_vars['HTTP_ACCEPT']);
         $this->setHost($server_vars['HTTP_HOST']);
+        foreach ($server_vars as $k => $v) {
+            if (preg_match("|^HTTP_|", $k)) $this->addHeader($k, $v);
+        }
 
         $items = array();
 
@@ -172,14 +188,195 @@ class ji_request {
         return $element['resource'];
     }
 
-    public function setVerb($verb)
+    public function setMethod($method)
     {
-        $this->_verb = $verb;
+        $this->_method = $method;
     }
 
-    public function getVerb()
+    public function getMethod()
     {
-        return $this->_verb;
+        return $this->_method;
+    }
+
+    public function setUrl($url)
+    {
+        $this->_url = $url;
+    }
+
+    public function getUrl()
+    {
+        return $this->_url;
+    }
+
+    public function setFormat($format)
+    {
+        $this->_format = $format;
+    }
+
+    public function getFormat()
+    {
+        return $this->_format;
+    }
+
+    public function setVersion($version)
+    {
+        $this->_version = $version;
+    }
+
+    public function getVersion()
+    {
+        return $this->_version;
+    }
+
+    public function handleMediaType() {
+        $this->setVersion("1.0");
+        $this->setFormat("json");
+    }
+
+    public function handleOauth() {
+        // Default we aren't authenticated
+        $this->authenticated = false;
+
+/**
+        // Find all authorization headers (we assume only 1 header exists)
+        $authHeader = $this->getHeader('HTTP_AUTHORIZATION');
+        if (! $authHeader) {
+            print "Header not found";
+            return;
+        }
+
+        // Parse headers into assoc array
+        $oauthHeaders = array();
+        foreach (explode(",", $authHeader) as $item) {
+            if (! preg_match("|^(?:OAuth )?(.+)=([\"']?)([^\"]+)\\2$|i", $item, $matches)) {
+                continue;
+            }
+
+            // Use trim on the key - some OAuth libraries are generous with spaces...
+            $oauthHeaders[trim($matches[1])] = urldecode($matches[3]);
+        }
+ */
+
+        // WE CHECK THE GET REQUEST, SHOULD BE HTTP_AUTHORIZATION_HEADERS
+        $oauthHeaders = $_GET;
+
+
+        // Check if all mandatory items exists
+        $mandatoryItems = array (
+            'oauth_version' => 1,
+            'oauth_nonce' => 1,
+            'oauth_timestamp' => 1,
+            'oauth_consumer_key' => 1,
+            'oauth_token' => 1,
+            'oauth_signature_method' => 1,
+            'oauth_signature' => 1);
+        $tmp = array_diff_key($mandatoryItems, $oauthHeaders);
+        if (count($tmp) > 0) {
+            // Not all mandatory items are found. Exit (BAD REQUEST)
+            print "Mandatory not found\n";
+            return;
+        }
+
+        // If set, check for correct realm. Realm is not required by the OAuth spec
+        if (isset($oauthHeaders['realm']) && $oauthHeaders['realm'] != "mainplus") {
+            // Incorrect realm. Exit (BAD REQUEST);
+            print "Incorrect realm\n";
+            return;
+        }
+
+//        // Check for timestamp bandwidth
+//        $delta = time() - $oauthHeaders['oauth_timestamp'];
+//        if ($delta < (0 - $config->settings->oauth->timestamp->before) ||
+//            $delta > ($config->settings->oauth->timestamp->after - 0)) {
+//            // Not inside timestamp bandwith. Exit (UNAUTHORIZED)
+//            return;
+//        }
+
+
+//        // Check if nonce for timestamp is already used, and save the nonce
+//        $nonce = new General_Model_Oauthnonce_Entity();
+//        $nonce = $nonce->findByNonce(
+//            $oauthHeaders['oauth_consumer_key'],
+//            $oauthHeaders['oauth_timestamp'],
+//            $oauthHeaders['oauth_nonce']
+//            );
+//        if ($nonce instanceof General_Model_Oauthnonce_Entity) {
+//            // Replay (attack). Nonce and timestamp already used
+//            return $this->createError(
+//                Idm_Constants::MSG_OAUTH_FAILURE_1,
+//                Idm_Constants::HTTP_STATUS_UNAUTHORIZED);
+//        }
+//        $nonce = new General_Model_Oauthnonce_Entity();
+//        $nonce->setNonce($oauthHeaders['oauth_nonce']);
+//        $nonce->setTimestamp($oauthHeaders['oauth_timestamp']);
+//        $nonce->setConsumerKey($oauthHeaders['oauth_consumer_key']);
+//        $nonce->save($nonce);
+
+
+//        // Fetch user-id from consumer_key/access_key
+//        $oauthHeaders['oauth_consumer_key']);
+//        if (! $website instanceof General_Model_Website_Entity) {
+//            return $this->createError(
+//                Idm_Constants::MSG_OAUTH_FAILURE_2,
+//                Idm_Constants::HTTP_STATUS_UNAUTHORIZED);
+//        }
+
+        // Check if encryption method can be used
+        $methods = explode(",", "PLAINTEXT,HMAC-SHA1");
+        if (! in_array($oauthHeaders['oauth_signature_method'], $methods)) {
+            // Exit, BAD REQUEST
+            print "Incorrect signmethod\n";
+            return;
+        }
+
+
+        // Find consumer-key access-token pair
+        $result = $this->db->query("SELECT c.consumer_key, c.consumer_secret,
+                                           a.access_token, a.access_secret,
+                                           a.user_id
+                                    FROM oauth_access_tokens AS a
+                                    LEFT JOIN oauth_consumers AS c ON a.oauth_id = c.id
+                                    WHERE a.access_token = '".$oauthHeaders['oauth_token']."' AND
+                                          c.consumer_key = '".$oauthHeaders['oauth_consumer_key']."'");
+        $row = $result ? $result->fetch_assoc() : null;
+        if ($row == null) {
+            // CONSUMER + ACCESS TOKEN NOT FOUND. Exit BAD REQUEST
+            print "Customer + access not found \n";
+            return;
+        }
+
+        // Validate signature
+        $consumer = new OAuthConsumer($row['consumer_key'], $row['consumer_secret']);
+        $access = new OAuthToken($row['access_token'], $row['access_secret']);
+        switch ($oauthHeaders['oauth_signature_method'])
+        {
+            case 'HMAC-SHA1' :
+                $signMethod = new OAuthSignatureMethod_HMAC_SHA1();
+                break;
+            case 'RSA-SHA1' :
+                $signMethod = new OAuthSignatureMethod_RSA_SHA1();
+                break;
+            case 'PLAINTEXT' :
+            default :
+                $signMethod = new OAuthSignatureMethod_PLAINTEXT();
+                break;
+        }
+
+        $uri = 'http://' . $this->getHost() . $this->getUrl();
+        $requestMethod = OauthRequest::from_request($this->getMethod(), $uri);
+        $signature = $oauthHeaders['oauth_signature'];
+        $valid = $signMethod->check_signature($requestMethod, $consumer, $access, $signature);
+        if (! $valid) {
+            print "Signature invalid found \n";
+            return;
+        }
+
+
+        // All is ok, set authentication information
+        $this->authenticated = true;
+        $this->authenticationinfo['user_id'] = $row['user_id'];
+        $this->authenticationinfo['consumer_key'] = $row['consumer_key'];
+        $this->authenticationinfo['access_token'] = $row['access_token'];
     }
 
 } 

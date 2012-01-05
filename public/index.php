@@ -6,10 +6,24 @@ ini_set('display_errors', true);
 
 // Include rest mapping
 include_once("../config/restmap.php");
+include_once("../config/db.php");
+include_once("../library/oauth/OAuth.php");
 
 // Setup
 set_exception_handler('handle_exception');
-$request = new ji_request($_SERVER);
+
+
+// Setup request
+$request = new ji_request($db, $_SERVER);
+$request->handleMediaType();
+$request->handleOauth();
+
+if ($request->authenticated == null) {
+    print "NOT authenticated\n";
+    exit;
+}
+
+
 
 // Pass through parent controllers if needed (in case of /event/%d/talk/%d/comment/%d)
 foreach ($request->getParentElements() as $element) {

@@ -36,7 +36,7 @@ abstract class ji_restController {
         /**
          * HTTP PUT and POST are pretty much interchangeable. Can be configured here 
          */
-        switch (strtolower($request->getVerb())) {
+        switch (strtolower($this->getRequest()->getMethod())) {
             case "delete" :
                 // Delete is always delete
                 $crudMethod = "Delete";

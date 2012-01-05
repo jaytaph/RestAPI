@@ -4,6 +4,7 @@ class ji_response {
     protected $_httpCode = 200;
     protected $_httpStatus = "Ok";
     protected $_body = "";
+    protected $_headers = array();
 
     function __construct() {
     }
@@ -13,7 +14,11 @@ class ji_response {
     }
 
     function getHttpCode() {
-        return $this->_httpCode = $httpCode;
+        return $this->_httpCode;
+    }
+
+    function getHeaders() {
+        return $this->_headers;
     }
 
     public function setBody($body) {
@@ -32,6 +37,10 @@ class ji_response {
     public function getHttpStatus()
     {
         return $this->_httpStatus;
+    }
+
+    public function addHeader($key, $value) {
+       $this->_headers[$key] = $value;
     }
 
 } 
